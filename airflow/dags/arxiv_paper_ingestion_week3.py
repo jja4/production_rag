@@ -4,7 +4,7 @@ from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
 from arxiv_ingestion.fetching import fetch_daily_papers
-from arxiv_ingestion.indexing import index_papers_bm25, index_papers_hybrid, verify_bm25_index, verify_hybrid_index
+from arxiv_ingestion.indexing import index_papers_bm25, verify_bm25_index
 from arxiv_ingestion.reporting import generate_daily_report
 
 # Import task functions from modular structure
@@ -22,15 +22,15 @@ default_args = {
     "catchup": False,
 }
 
-# Create the DAG
+# Create the DAG for Week 3 - BM25 keyword search only
 dag = DAG(
-    "arxiv_paper_ingestion",
+    "arxiv_paper_ingestion_week3",
     default_args=default_args,
-    description="Daily arXiv CS.AI paper pipeline: fetch → store to PostgreSQL → chunk & embed → hybrid OpenSearch indexing",
-    schedule="0 6 * * 1-5",  # Monday-Friday at 6 AM UTC
+    description="Week 3: arXiv CS.AI paper pipeline with BM25 keyword search (no chunking/embeddings)",
+    schedule=None,  # Manual trigger only
     max_active_runs=1,
     catchup=False,
-    tags=["arxiv", "papers", "ingestion", "hybrid-search", "embeddings", "chunks"],
+    tags=["arxiv", "papers", "ingestion", "week3", "bm25", "keyword-search"],
 )
 
 # Task definitions
@@ -53,10 +53,10 @@ index_bm25_task = PythonOperator(
     dag=dag,
 )
 
-# Hybrid search indexing task (Week 4+ - chunking + embeddings + vector search)
-index_hybrid_task = PythonOperator(
-    task_id="index_papers_hybrid",
-    python_callable=index_papers_hybrid,
+# Verify the BM25 index
+verify_task = PythonOperator(
+    task_id="verify_bm25_index",
+    python_callable=verify_bm25_index,
     dag=dag,
 )
 
@@ -77,7 +77,6 @@ cleanup_task = BashOperator(
     dag=dag,
 )
 
-# Task dependencies
-# Pipeline: setup -> fetch -> [bm25_index, hybrid_index] -> report -> cleanup
-# Both indexing tasks run in parallel after fetch
-setup_task >> fetch_task >> [index_bm25_task, index_hybrid_task] >> report_task >> cleanup_task
+# Task dependencies for Week 3
+# Pipeline: setup -> fetch -> bm25_index -> verify -> report -> cleanup
+setup_task >> fetch_task >> index_bm25_task >> verify_task >> report_task >> cleanup_task
